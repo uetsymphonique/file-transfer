@@ -1,8 +1,8 @@
 # DNS Downloader
 
-Công cụ download file qua DNS covert channel. Ngược lại với DNSExfiltrator - thay vì upload/exfiltrate, tool này cho phép download file từ server về client thông qua DNS TXT records.
+File download tool over DNS covert channel. Reverse of DNSExfiltrator - instead of upload/exfiltration, this tool allows downloading files from server to client via DNS TXT records.
 
-## Cơ chế hoạt động
+## How It Works
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -18,62 +18,89 @@ Công cụ download file qua DNS covert channel. Ngược lại với DNSExfiltr
 │     ├─> Response: TXT "base64_data_chunk_1"                │
 │     ...                                                      │
 │                                                              │
-│  N. Ghép chunks → Decode → Decrypt (RC4) → Unzip → Save    │
+│  N. Reassemble → Decode → Decrypt (RC4) → Unzip → Save     │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-## Cài đặt
+## Installation
+
+### Python Client
 
 ```bash
 pip install -r requirements.txt
 ```
 
-## Sử dụng
+### C# Client
 
-### Server (máy cung cấp file)
+```batch
+build.bat
+```
+
+Or manually:
+
+```batch
+csc /t:exe /out:DnsDownloader.exe /r:System.IO.Compression.dll /r:System.IO.Compression.FileSystem.dll DnsDownloader.cs
+```
+
+## Usage
+
+### Server (File Provider)
 
 ```bash
-# Chạy với quyền root (port 53)
+# Run with root privileges (port 53)
 sudo python3 dns_server.py -d yourdomain.com -f /path/to/file -p password
 
-# Tùy chọn
+# With options
 sudo python3 dns_server.py \
     -d yourdomain.com \
     -f /path/to/file \
     -p password \
-    -b32              # Dùng Base32 thay vì Base64URL
+    -b32              # Use Base32 instead of Base64URL
     -c 150            # Chunk size (default: 200)
-    -P 5353           # Port khác (default: 53)
+    -P 5353           # Alternative port (default: 53)
 ```
 
-### Client (máy download file)
+### Client (File Downloader)
+
+**Python Client:**
 
 ```bash
 python3 dns_downloader.py -d yourdomain.com -p password
 
-# Tùy chọn
+# With options
 python3 dns_downloader.py \
     -d yourdomain.com \
     -p password \
-    -s 192.168.1.100  # DNS server IP (nếu không dùng system DNS)
-    -P 5353           # Port (nếu khác 53)
-    -o output.txt     # Tên file output
-    -t 100            # Delay giữa các request (ms)
-    -r 5              # Số lần retry mỗi chunk
+    -s 192.168.1.100  # DNS server IP (if not using system DNS)
+    -P 5353           # Port (if not 53)
+    -o output.txt     # Output filename
+    -t 100            # Delay between requests (ms)
+    -r 5              # Number of retries per chunk
 ```
 
-## Test local
+**C# Client:**
+
+```batch
+DnsDownloader.exe -d yourdomain.com -p password
+
+# With options
+DnsDownloader.exe -d yourdomain.com -p password -s 192.168.1.100 -P 5353 -o output.txt -t 100 -r 5
+```
+
+## Local Testing
 
 ### Terminal 1 - Server
-```bash
-# Tạo file test
-echo "Hello from DNS Downloader!" > /tmp/test.txt
 
-# Chạy server (port 5353 để không cần root)
-python3 dns_server.py -d test.local -f /tmp/test.txt -p secret123 -P 5353
+```bash
+# Create test file
+echo "Hello from DNS Downloader!" > testfile.txt
+
+# Run server (port 5353 to avoid root requirement)
+python3 dns_server.py -d test.local -f testfile.txt -p secret123 -P 5353
 ```
 
-### Terminal 2 - Client
+### Terminal 2 - Python Client
+
 ```bash
 # Download file
 python3 dns_downloader.py -d test.local -p secret123 -s 127.0.0.1 -P 5353 -o downloaded.txt
@@ -82,54 +109,121 @@ python3 dns_downloader.py -d test.local -p secret123 -s 127.0.0.1 -P 5353 -o dow
 cat downloaded.txt
 ```
 
-## Tham số
+### Terminal 2 - C# Client (Windows)
+
+```batch
+# Download file
+DnsDownloader.exe -d test.local -p secret123 -s 127.0.0.1 -P 5353 -o downloaded.txt
+
+# Verify
+type downloaded.txt
+```
+
+## Parameters
 
 ### Server (dns_server.py)
 
-| Tham số | Mô tả | Bắt buộc |
-|---------|-------|----------|
-| `-d, --domain` | Domain name | ✓ |
-| `-f, --file` | File cần serve | ✓ |
-| `-p, --password` | Password mã hóa | ✓ |
-| `-b32, --base32` | Dùng Base32 encoding | |
-| `-c, --chunk-size` | Kích thước chunk (default: 200) | |
-| `-P, --port` | DNS port (default: 53) | |
+| Parameter          | Description               | Required |
+| ------------------ | ------------------------- | -------- |
+| `-d, --domain`     | Domain name               | ✓        |
+| `-f, --file`       | File to serve             | ✓        |
+| `-p, --password`   | Encryption password       | ✓        |
+| `-b32, --base32`   | Use Base32 encoding       |          |
+| `-c, --chunk-size` | Chunk size (default: 200) |          |
+| `-P, --port`       | DNS port (default: 53)    |          |
 
-### Client (dns_downloader.py)
+### Client (dns_downloader.py / DnsDownloader.exe)
 
-| Tham số | Mô tả | Bắt buộc |
-|---------|-------|----------|
-| `-d, --domain` | Domain name | ✓ |
-| `-p, --password` | Password giải mã | ✓ |
-| `-s, --server` | DNS server IP | |
-| `-P, --port` | DNS port (default: 53) | |
-| `-o, --output` | Tên file output | |
-| `-t, --throttle` | Delay giữa requests (ms) | |
-| `-r, --retries` | Số lần retry mỗi chunk | |
+| Parameter        | Description                 | Required |
+| ---------------- | --------------------------- | -------- |
+| `-d, --domain`   | Domain name                 | ✓        |
+| `-p, --password` | Decryption password         | ✓        |
+| `-s, --server`   | DNS server IP               |          |
+| `-P, --port`     | DNS port (default: 53)      |          |
+| `-o, --output`   | Output filename             |          |
+| `-t, --throttle` | Delay between requests (ms) |          |
+| `-r, --retries`  | Number of retries per chunk |          |
 
-## Đặc điểm
+## Features
 
-- **Mã hóa**: RC4 (tương thích với DNSExfiltrator)
-- **Nén**: ZIP
-- **Encoding**: Base64URL (default) hoặc Base32
-- **Checksum**: Kiểm tra tính toàn vẹn file
-- **DNS cache bypass**: Random nonce trong mỗi query
-- **Retry**: Tự động retry khi chunk bị lỗi
+- **Encryption**: RC4 (compatible with DNSExfiltrator)
+- **Compression**: ZIP
+- **Encoding**: Base64URL (default) or Base32
+- **Checksum**: File integrity verification
+- **DNS Cache Bypass**: Random nonce in each query
+- **Retry Mechanism**: Auto-retry on chunk failure
+- **Cross-Platform**: Python (Linux/Windows/Mac) and C# (Windows)
 
 ## Use Cases
 
-1. **Red Team**: Deliver payload vào target qua DNS khi HTTP/HTTPS bị chặn
-2. **Security Testing**: Test khả năng detect DNS tunneling của tổ chức
-3. **Research**: Nghiên cứu covert channel techniques
+1. **Red Team**: Deliver payloads to targets via DNS when HTTP/HTTPS is blocked
+2. **Security Testing**: Test DNS tunneling detection capabilities
+3. **Research**: Study covert channel techniques
+4. **Data Retrieval**: Download tools/scripts in restricted environments
 
-## Lưu ý
+## Implementation Details
 
-- Cần có authoritative DNS server hoặc truy cập trực tiếp đến server
-- Với môi trường thực tế, cần setup NS record trỏ về server
-- Tốc độ chậm hơn so với HTTP/FTP - phù hợp với file nhỏ/vừa
-- DNS logging có thể detect pattern bất thường
+### Data Flow (Server)
+
+```
+Original File → ZIP Compress → RC4 Encrypt → Base64URL/Base32 Encode → Split into Chunks
+```
+
+### Data Flow (Client)
+
+```
+Download Chunks → Concatenate → Decode → RC4 Decrypt → ZIP Decompress → Verify Checksum → Save
+```
+
+### DNS Packet Structure
+
+**INIT Request:**
+
+- Query: `init.<domain>`
+- Response: `filename|total_chunks|encoding|checksum`
+
+**CHUNK Request:**
+
+- Query: `chunk-N.<random_nonce>.<domain>`
+- Response: Base64URL/Base32 encoded data chunk
+
+## Security Considerations
+
+- Requires authoritative DNS server or direct server access
+- For production use, setup NS record pointing to your server
+- Slower than HTTP/FTP - suitable for small/medium files
+- DNS logging may detect unusual patterns
+- DNS queries are typically not encrypted (unless using DoH/DoT)
+- Consider rate limiting to avoid detection
+
+## Platform Support
+
+| Component         | Platform          | Requirements                  |
+| ----------------- | ----------------- | ----------------------------- |
+| **Server**        | Linux/Windows/Mac | Python 3.x, dnslib            |
+| **Python Client** | Linux/Windows/Mac | Python 3.x, dnslib, dnspython |
+| **C# Client**     | Windows           | .NET Framework 4.5+           |
+
+## Troubleshooting
+
+**Server not receiving queries:**
+
+- Check firewall rules (allow UDP port)
+- Verify server is listening on correct interface (0.0.0.0)
+- Test DNS resolution: `nslookup -type=txt init.test.local 127.0.0.1`
+
+**Client connection timeout:**
+
+- Verify DNS server IP and port
+- Check network connectivity
+- Ensure no DNS filtering/blocking
+
+**Checksum mismatch:**
+
+- Verify password matches on both ends
+- Check for packet loss (increase retries)
+- Ensure encoding type matches (base32/base64url)
 
 ## License
 
 Educational/Research purposes only.
-
